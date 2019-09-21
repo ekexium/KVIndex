@@ -24,7 +24,6 @@ public class KVIndexTest {
                 // generate key size and value size
                 int keySize = random.nextInt(4096) + 1;
                 int valueSize = random.nextInt(4096) + 1;
-                Log.logd("keysize = " + keySize + "; value size = " + valueSize);
 
                 // generate key and value
                 byte[] key = ByteBuffer.allocate(keySize).array();

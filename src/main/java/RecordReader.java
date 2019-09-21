@@ -51,9 +51,6 @@ class RecordReader {
         byte[] keySizeArray = new byte[keySizeLength];
         readArray(inputStream, keySizeArray);
         record.keySize = ByteBuffer.wrap(keySizeArray).order(ByteOrder.BIG_ENDIAN).getShort();
-        Log.logd("key_size = " + Integer.toBinaryString((int)keySizeArray[0])
-                 + " " + Integer.toBinaryString((int)keySizeArray[1])
-                 + " => " + record.keySize);
         if (record.keySize < 0 || record.keySize > MAX_KEY_SIZE)
             throw new InvalidDataFormatException("Invalid key size: " + record.keySize);
 
@@ -69,9 +66,6 @@ class RecordReader {
         byte[] valueSizeArray = new byte[valueSizeLength];
         readArray(inputStream, valueSizeArray);
         record.valueSize = ByteBuffer.wrap(valueSizeArray).order(ByteOrder.BIG_ENDIAN).getShort();
-        Log.logd("value_size = " + Integer.toBinaryString((int)valueSizeArray[0])
-                 + " " + Integer.toBinaryString((int)valueSizeArray[1])
-                 + " => " + record.valueSize);
         if (record.valueSize < 0 || record.valueSize > MAX_VALUE_SIZE)
             throw new InvalidDataFormatException("Invalid value size: " + record.valueSize);
 

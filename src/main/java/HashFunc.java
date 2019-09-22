@@ -2,9 +2,9 @@ import java.nio.ByteBuffer;
 
 class HashFunc {
     /**
-     * A DJB hash function that maps key(bytes[], <= 4096 bytes) to an address(<= 8 bytes).
-     * <p>
-     * The capacity is set to the nearest 2^k to (N / preferred_load_factor).
+     * A DJB hash function that maps key(bytes[], <= 4096 bytes) to an address(long).
+     *
+     * The capacity is set to the nearest upper 2^k to (N / preferred_load_factor).
      */
 
     long N;                 // size of the set of keys
@@ -24,10 +24,14 @@ class HashFunc {
         capacity = 1;
         while (capacity <= MAX_CAPACITY && capacity < N)
             capacity <<= 1;
-        if (capacity > MAX_CAPACITY) {
+
+        capacity *= loadFactorInv;
+        if (capacity > MAX_CAPACITY || capacity < 0) {
             capacity = MAX_CAPACITY;
-            Log.logw("Hash functions use MAX_CAPACITY");
+            Log.logw("Hash function use MAX_CAPACITY");
         }
+
+        Log.logi("Hash capacity = " + capacity);
     }
 
     long hash(byte[] key) {
@@ -47,6 +51,7 @@ class HashFunc {
             hash = (hash << 5) + hash + l;
         }
 
-        return hash;
+        // return the lowest k bits as hash code
+        return hash & (capacity - 1);
     }
 }

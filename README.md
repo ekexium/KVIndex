@@ -15,7 +15,9 @@ Platform: 2.4GHz 2-core CPU, 16 GB RAM, 512 GB APPLE SSD
 
 ![](doc/benchmark.png)
 
-The benchmark shows that the number of `N` has little effect on query performance. However, due to the bottleneck of disk I/O, multithreading can hardly increase query performance.
+The benchmark shows that the number of `N` has little effect on query performance. 
+
+However, due to the bottleneck of disk I/O, multithreading can hardly increase query performance.
 
 
 ## Implementation
@@ -26,11 +28,13 @@ All indexes are stored in the disk. There are totally (by default) 512 index fil
 
 An index file consists of several slots, each slot is (by default) 13 bytes, containing key_size, address, value_size, and next_slot_id. Collisions are handled with linked lists, where next_slot_id is used.
 
-A query first calculates the hashcode of the key. Secondly, the address of the corresponding record is retrieved from the index file. At last, read the value from the data file and return it. The second and third steps may repeat some times if there are hash collisions. The amortized number of disk accesses is 2.
+A query first calculates the hashcode of the key. Secondly, the address of the corresponding record is retrieved from the index file. At last, read the value from the data file and return it. The second and third steps may repeat some times if there are hash collisions. 
+
+With a good hash function, the amortized number of disk accesses for each query is 2.
 
 ## Future work
 
-There are a few major factors that can be optimized to improve performance.
+There are a few major factors that can be optimized to improve performance, especially in a concurrent environment.
 
 1. [ ] better hash function
 2. [ ] memory buffer

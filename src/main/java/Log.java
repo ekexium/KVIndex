@@ -1,3 +1,6 @@
+/**
+ * A utility class for logging
+ */
 public class Log {
     private static final boolean useDebug = false;
     private static final boolean useWarning = true;

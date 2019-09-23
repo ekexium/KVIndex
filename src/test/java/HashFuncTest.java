@@ -10,7 +10,6 @@ public class HashFuncTest {
     void hashFuncCorrectness() {
         Random random = new Random(System.currentTimeMillis());
         int N = random.nextInt(1000000);
-        N = 12;
         HashFunc hasher = new HashFunc(N);
         for (int i = 0; i < N; i++) {
             byte[] arr = new byte[random.nextInt(4096)];

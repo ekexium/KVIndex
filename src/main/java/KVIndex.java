@@ -5,30 +5,51 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
+/**
+ * The main class of KVIndex using hash indexing.
+ *
+ * Input:
+ *  A binary data file consisting of records.
+ *  Each record is of format (key_size, key, value_size, value).
+ *
+ * Output:
+ *  get(key) returns the corresponding value.
+ *
+ * Implementation:
+ *  During initialization, create index files for all records.
+ *  Each files consists of several slots.
+ *
+ *  Default slot structure:
+ *  | key_size | address | value_size | next_slot_id |
+ *  |    2     |    5    |      2     |       4      |
+ *
+ *  address indicates the address of the original record in the data file.
+ *
+ *  key_size can be used to reduce unnecessary checks.
+ *
+ *  key_size and value_size can be used to reduce unnecessary disk accesses.
+ *
+ *  Use linked list to handle collisions.
+ *  next_slot_id indicates the id of the next slot in the linked list,
+ *  whose address = slot_size(11) * next_slot_id.
+ *
+ * Indexing:
+ *  hash() : key -> hashCode
+ *  hashCode: h bits
+ *  First (h - f) bits are used for in-file index.
+ *  Last f bits are used for file index, i.e. there are 2^f index files.
+ *
+ *  Example:
+ *  h = 24, f = 8
+ *  fileIdMask:      0x000000ff
+ *  infileIndexMask: 0x00ffff00
+ */
 public class KVIndex {
-    /**
-     * hash() : key -> hashCode
-     * hashCode: h bits
-     * First (h - f) bits are used for in-file index.
-     * Last f bits are used for file index, i.e. there are 2^f index files.
-     * <p>
-     * Example:
-     * h = 24, f = 8
-     * fileIdMask:      0x000000ff
-     * infileIndexMask: 0x00ffff00
-     */
-    final int f = 8;
-    long fileIdMask;
-    long infileIndexMask;
+    final int f = 8;        // # of bits used for file id
+    long fileIdMask;        // bitwise mask for file id
+    long infileIndexMask;   // bitwise mask for in-file index
 
-    /**
-     * size of each slot in index files
-     * next_index_id use 4 bytes, since h - f = 40 - 8 = 32 bits
-     * i.e. there should be at most 2^31 -1 indexes in the file
-     * key_size | key_pos | next_index_id
-     * 2        |    5    |      4
-     */
-
+    // constants used to specify the format of index slots
     private static final int addrLength = 5;
     private static final int infilePointerLength = 4;
     static int slotSize = Record.keySizeLength + addrLength
@@ -43,20 +64,27 @@ public class KVIndex {
     // original data file
     RandomAccessFile dataFile;
 
-    long N; // number of key-value pairs
+    // number of key-value pairs
+    long N;
 
-    long collisionCount = 0;
-
+    // hash function
     HashFunc hasher;
-
-    public static void main(String[] args) {
-        System.out.println("Hello PingCAP");
-    }
 
     KVIndex() {
         System.out.println("Hello PingCAP");
     }
 
+    /**
+     * Creates index to get ready for queries.
+     *
+     * @param filename
+     *        The filename of data.
+     *
+     * @throws IOException
+     *         If I/O errors occur.
+     * @throws InvalidDataFormatException
+     *         If the data file has invalid format.
+     */
     public void initialize(String filename)
             throws IOException, InvalidDataFormatException {
         N = countEntry(filename);
@@ -68,6 +96,17 @@ public class KVIndex {
         dataFile = new RandomAccessFile(filename, "r");
     }
 
+    /**
+     * Thread-safe query function that returns the value corresponding to the given key.
+     *
+     * @param key
+     *        Key of the query.
+     *
+     * @return The value.
+     *
+     * @throws UninitializedException
+     *         If the KVIndex object has not been initialized.
+     */
     synchronized public byte[] get(byte[] key) throws UninitializedException {
         if (hasher == null)
             throw new UninitializedException("KVIndex has not been initialized");
@@ -85,7 +124,8 @@ public class KVIndex {
 
                 while (true) {
                     if (slotSize * infileIndex < 0) {
-                        Log.loge("seek offset < 0");
+                        Log.logi("seek offset < 0");
+                        return null;
                     }
                     indexFile.seek(slotSize * infileIndex);
                     indexFile.read(slotArr);
@@ -112,7 +152,6 @@ public class KVIndex {
                             // find the key-value
                             // retrieve and return value
                             short valueSize = buf.getShort(Record.keySizeLength + addrLength);
-                            Log.logd("[get] value size = " + valueSize);
                             byte[] value = new byte[valueSize];
                             dataFile.seek(address + Record.keySizeLength
                                           + keySize + Record.valueSizeLength);
@@ -126,8 +165,9 @@ public class KVIndex {
                     infileIndex = buf.getInt(Record.keySizeLength
                                              + addrLength + Record.valueSizeLength);
 
-                    if (infileIndex < 0)
-                        Log.loge("infileIndex < 0");
+                    if (infileIndex <= 0) {
+                        return null;
+                    }
                 }
             }
         } catch (IOException e) {
@@ -136,6 +176,19 @@ public class KVIndex {
         }
     }
 
+    /**
+     * Counts the total number of records.
+     *
+     * @param filename
+     *        The filename of data.
+     *
+     * @return The number of records in the data
+     *
+     * @throws IOException
+     *         If I/O errors occur
+     * @throws InvalidDataFormatException
+     *         If the data file has invalid format.
+     */
     long countEntry(String filename) throws IOException, InvalidDataFormatException {
         long rt = 0;
         RecordReader reader = new RecordReader(filename);
@@ -147,7 +200,7 @@ public class KVIndex {
     }
 
     /**
-     * Create empty index files.
+     * Creates empty index files.
      */
     void createIndexFile() {
         try {
@@ -174,9 +227,19 @@ public class KVIndex {
         }
     }
 
+    /**
+     * Creates index for every record.
+     *
+     * @param filename The filename of data
+     */
     private void createIndex(String filename) {
         try {
+            Log.logi("Begin creating index.");
+            long startTime = System.currentTimeMillis();
             RecordReader reader = new RecordReader(filename);
+
+            // open data file to check replicated key
+
             while (reader.hasNextRecord()) {
                 // get a record
                 Record record = reader.getNextRecord(true);
@@ -201,15 +264,14 @@ public class KVIndex {
                     // hash collision, need to add new slot
                     // temporarily store the address of next slot
                     // skip the key_position and value_size field
-                    collisionCount++;
-
                     indexFile.skipBytes(addrLength + Record.valueSizeLength);
                     byte[] nextPos = new byte[infilePointerLength];
                     indexFile.read(nextPos);
 
                     // set the pointer to the next slot to the end, where new record is written
                     indexFile.seek(slotSize * infileIndex
-                                   + Record.keySizeLength + addrLength + Record.valueSizeLength);
+                                   + Record.keySizeLength + addrLength +
+                                   Record.valueSizeLength);
                     indexFile.writeInt((int) (indexFile.length() / slotSize));
 
                     // append the file
@@ -218,25 +280,50 @@ public class KVIndex {
                 }
                 indexFile.close();
             }
+            Log.logi("Index created, used " + (System.currentTimeMillis() - startTime) + "ms.");
         } catch (IOException | InvalidDataFormatException e) {
             Log.loge("Failed to create index: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
+    /**
+     * Calculates the masks for file id and infile index.
+     */
     void calculateMask() {
         fileIdMask = (1 << f) - 1;
         infileIndexMask = (hasher.capacity - 1) ^ fileIdMask;
     }
 
+    /**
+     * Returns the index file name
+     *
+     * @param fileId
+     *        The id of the index file
+     *
+     * @return The filename
+     */
     private String getIndexFilePath(int fileId) {
         return indexPath + File.separator + indexFilenamePrefix + fileId + indexFilenamePostfix;
     }
 
-    private void writeSlot(RandomAccessFile indexFile, Record record, byte[] nextPos)
+    /**
+     * Writes a record to the current position of indexFile.
+     *
+     * @param indexFile
+     *        File with position
+     * @param record
+     *        The record to be written
+     * @param nextSlotId
+     *        The next slot id in the linked list
+     *
+     * @throws IOException
+     *         If I/O errors occur.
+     */
+    private void writeSlot(RandomAccessFile indexFile, Record record, byte[] nextSlotId)
             throws IOException {
-        if (nextPos.length != infilePointerLength)
-            throw new IllegalArgumentException("Length of nextPos must be 4");
+        if (nextSlotId.length != infilePointerLength)
+            throw new IllegalArgumentException("Length of nextSlotId must be 4");
 
         Log.logd("--------writeslot--------");
         Log.logd("key = " + Arrays.toString(record.key));
@@ -259,11 +346,14 @@ public class KVIndex {
         indexFile.writeShort(record.valueSize);
 
         // position of next slot if there is hash collision
-        indexFile.write(nextPos);
+        indexFile.write(nextSlotId);
         Log.logd("-------\\writeslot--------");
     }
 }
 
+/**
+ * The exception class for queries before initialization.
+ */
 class UninitializedException extends Exception {
     UninitializedException() {
         super();

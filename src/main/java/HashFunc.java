@@ -1,12 +1,11 @@
 import java.nio.ByteBuffer;
 
+/**
+ * A DJB hash function that maps key(bytes[], <= 4096 bytes) to an address(long).
+ *
+ * The capacity is set to the nearest upper 2^k to (N / preferred_load_factor).
+ */
 class HashFunc {
-    /**
-     * A DJB hash function that maps key(bytes[], <= 4096 bytes) to an address(long).
-     *
-     * The capacity is set to the nearest upper 2^k to (N / preferred_load_factor).
-     */
-
     long N;                 // size of the set of keys
     long capacity;          // capacity of slots
     int loadFactorInv = 2;  // the reciprocal of preferred load factor
@@ -34,6 +33,14 @@ class HashFunc {
         Log.logi("Hash capacity = " + capacity);
     }
 
+    /**
+     * DJB hash function.
+     * Thread-safe.
+     *
+     * @param key
+     *        Key of hash function
+     * @return The hashcode of key
+     */
     long hash(byte[] key) {
         long hash = 5381;
 

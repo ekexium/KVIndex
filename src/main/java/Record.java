@@ -1,5 +1,10 @@
+/**
+ * The record class that stores info of a record and some metadata about records.
+ *
+ * By default, assume key size and value size <= 4KB
+ */
 public class Record {
-    // key size and value size <= 4KB
+
 
     static int keySizeLength = 2;         // length of the field key_size, by default 2 bytes
     static int valueSizeLength = 2;       // length of the field value_size, by default 2 bytes

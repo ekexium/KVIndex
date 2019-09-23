@@ -1,71 +1,93 @@
+import org.apache.commons.lang3.ArrayUtils;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Random;
+import java.util.*;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class KVIndexTest {
 
     private final KVIndex index = new KVIndex();
 
-    ArrayList<byte[]> keys = new ArrayList<byte[]>();
-    ArrayList<byte[]> values = new ArrayList<byte[]>();
+    static ArrayList<byte[]> keys = new ArrayList<byte[]>();
+    static ArrayList<byte[]> values = new ArrayList<byte[]>();
+    static long N;
+    static String filename = "data" + File.separator + "data";
+    static HashSet<List<Byte>> set = new HashSet<>();
 
-    private long makeData(String filename, boolean testCorrectness) throws IOException {
-        // when testing correctness, value = [key key]
+    @BeforeAll
+    static void makeData() {
+        Random random = new Random(System.currentTimeMillis());
+        int n = random.nextInt(200000) + 1;
+        makeData(n);
+    }
 
-        FileOutputStream out = new FileOutputStream(filename);
-        long seed = System.currentTimeMillis();
-        Log.logd("Seed = " + seed);
-        Random random = new Random(seed);
-
-        // generate the number of k-v pairs
-        int n = random.nextInt(10000) + 1;
+    static void makeData(int n) {
         try {
-            for (int i = 0; i < n; i++) {
-                Log.logd("[gen] " + i);
-                // generate key size and value size
-                int keySize = random.nextInt(4096) + 1;
-                int valueSize = random.nextInt(4096) + 1;
+            keys.clear();
+            values.clear();
 
-                // generate key and value
-                byte[] key = new byte[keySize];
-                random.nextBytes(key);
-                byte[] value = new byte[valueSize];
-                random.nextBytes(value);
-                if (testCorrectness) {
+            Log.logi("Begin generating data.");
+            long startTime = System.currentTimeMillis();
+            FileOutputStream out = new FileOutputStream(filename);
+            long seed = System.currentTimeMillis();
+            Log.logi("Seed = " + seed);
+            Random random = new Random(seed);
+
+            // generate the number of k-v pairs
+            try {
+                for (int i = 0; i < n; i++) {
+                    Log.logd("[gen] " + i);
+                    // generate key size and value size
+                    int keySize = random.nextInt(4096) + 1;
+                    int valueSize = random.nextInt(4096) + 1;
+
+                    // for benchmark
+                    keySize = 4096;
+                    valueSize = 4096;
+
+                    // generate key and value
+                    byte[] key = new byte[keySize];
+                    Byte[] bkey = new Byte[keySize];
+                    do {
+                        random.nextBytes(key);
+                        bkey = ArrayUtils.toObject(key);
+                    } while (set.contains(Arrays.asList(bkey)));
+                    byte[] value = new byte[valueSize];
+                    random.nextBytes(value);
+                    set.add(Arrays.asList(bkey));
                     keys.add(key);
                     values.add(value);
-                }
-                Log.logd("key = " + Arrays.toString(key));
-                Log.logd("value = " + Arrays.toString(value));
+                    Log.logd("key = " + Arrays.toString(key));
+                    Log.logd("value = " + Arrays.toString(value));
 
-                // write to file
-                out.write(ByteBuffer.allocate(2).putShort((short) key.length).array());
-                out.write(key);
-                out.write(ByteBuffer.allocate(2).putShort((short) value.length).array());
-                out.write(value);
+                    // write to file
+                    out.write(ByteBuffer.allocate(2).putShort((short) key.length).array());
+                    out.write(key);
+                    out.write(ByteBuffer.allocate(2).putShort((short) value.length).array());
+                    out.write(value);
+                }
+                Log.logi("Data generated, used "
+                         + (System.currentTimeMillis() - startTime) + " " + "ms.");
+            } finally {
+                out.close();
             }
-        } finally {
-            out.close();
+            N = n;
+        } catch (Exception e) {
+            e.printStackTrace();
         }
-        return n;
     }
 
     @Test
     void testCountEntry() {
         String filename = "data" + File.separator + "data";
         try {
-            long n = makeData(filename, false);
             long count = index.countEntry(filename);
-            assertEquals(count, n);
+            assertEquals(count, N);
         } catch (Exception e) {
             System.out.println(e.getMessage());
             e.printStackTrace();
@@ -88,8 +110,6 @@ public class KVIndexTest {
     @Test
     void testInitialization() {
         try {
-            String filename = "data" + File.separator + "data";
-            makeData(filename, false);
             index.initialize(filename);
         } catch (Exception e) {
             e.printStackTrace();
@@ -100,16 +120,27 @@ public class KVIndexTest {
     void testCorrectness() {
         try {
             // initialization
-            String filename = "data" + File.separator + "data";
-            makeData(filename, true);
             index.initialize(filename);
 
             // construct queries
             for (int i = 0; i < keys.size(); i++) {
                 byte[] value = index.get(keys.get(i));
-                Log.logd("value = " + Arrays.toString(value));
-                Log.logd("true value = " + Arrays.toString(values.get(i)));
+                if (Arrays.compare(value, values.get(i)) != 0) {
+                    Log.logd("value = " + Arrays.toString(value));
+                    Log.logd("true value = " + Arrays.toString(values.get(i)));
+                }
                 assertEquals(Arrays.compare(value, values.get(i)), 0);
+            }
+
+            // invalid queries
+            Random random = new Random(System.currentTimeMillis());
+            for (int i = 0; i < 10; ) {
+                byte[] nkey = new byte[Record.MAX_KEY_SIZE];
+                for (byte[] key : keys) {
+                    if (Arrays.compare(key, nkey) == 0) continue;
+                }
+                i++;
+                assertNull(index.get(nkey));
             }
         } catch (Exception e) {
             e.printStackTrace();
